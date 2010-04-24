@@ -39,11 +39,12 @@ import sys
 
 import math
 from math import pi as PI
+from math import cos
 
 import getopt
 
 import pygame
-from pygame import display, event, mouse, image, draw
+from pygame import display, event, mouse, image, draw, Rect
 from pygame import QUIT, MOUSEBUTTONDOWN, MOUSEBUTTONUP, MOUSEMOTION
 pygame.init()
 
@@ -52,6 +53,8 @@ from lines import distance, inclination, vectorAB
 
 import shapes
 from shapes import Triangle, Parallelogram
+
+import docking
 
 
 #---- Global constants
@@ -62,35 +65,50 @@ PRINT_OUT = False
 
 # Game display title
 TITLE = "pyTang"
+ICON_FILE_NAME = 'pytang.bmp'
+
+# Game field size
+SCREEN_W, SCREEN_H = (640, 420)
 
 # Game field background color
 BACKGROUND_COLOR = (0xFF, 0xFF, 0xFF)
-
 # Shape edge color
 SHAPE_COLOR = (0x00, 0x00, 0x00)
+# Docking edge color
+DOCKING_COLOR = (0xFF, 0x00, 0xFF)
+
+# Shapes docking thresholds
+DOCKING_ANGULAR_THRESHOLD_COS = cos(20 * PI / 180)
+DOCKING_DISTANCE_THRESHOLD = 10
 
 
-def _draw_shape_filled(surface, shape):
+#---- Auxilary routines
+
+def _draw_shape_filled(surface, shape, docking=None):
     """Draw the shape on the given surface.
     
     Arguments:
         surface - drawing surface (an instance of pygame.Surface class);
         shape - shape to draw (an instance of one of the shape classes
             defined in shapes module);
+        docking - argument is not in use;
     Result:
-        bounding box, defined during the drawing;
+        shape bounding box;
     """
     return draw.polygon(surface, SHAPE_COLOR, shape.get_vertices())
 
-def _draw_shape_draft(surface, shape):
+
+def _draw_shape_draft(surface, shape, docking=None):
     """Draw the shape on the given surface.
     
     Arguments:
         surface - drawing surface (an instance of pygame.Surface class);
         shape - shape to draw (an instance of one of the shape classes
             defined in shapes module);
+        docking - a pair of docking edges (one edge belongs to the
+            shape, other edge belongs to some other shape).
     Result:
-        bounding box, defined during the drawing;
+        shape bounding box;
     """
     
     # Get some of the shape attributes
@@ -101,6 +119,19 @@ def _draw_shape_draft(surface, shape):
     shape_bounds = draw.aalines(
         surface, SHAPE_COLOR, True, shape.get_vertices()
     )
+    # Draw docking edges
+    if docking is not None:
+        shape_bounds.union_ip(
+            Rect.union(
+                *[
+                    draw.aaline(
+                        surface, DOCKING_COLOR,
+                        *edge
+                    )
+                    for edge in docking
+                ]
+            )
+        )
     
     # Draw the shape inner circle
     draw.circle(
@@ -130,16 +161,39 @@ def _draw_shape_draft(surface, shape):
     return shape_bounds
 
 
+def clear_frame(screen, background, frame):
+    """Clear the given rectangle area of the screen.
+    
+    Arguments:
+        screen - screen to clear (pygame.Surface instance);
+        background - background image, a source of data to fill
+            the screen, (pygame.Surface instance);
+        frame - area to clear (pygame.Rect instance).
+    """
+    screen.blit(
+        background,
+        frame.topleft, frame
+    )
+
+
+def gravity(static, floating, manurotate, manumove):
+    """Currying docking.gravity routine"""
+    return docking.gravity(
+        static, floating,
+        DOCKING_ANGULAR_THRESHOLD_COS,
+        DOCKING_DISTANCE_THRESHOLD,
+        manurotate, manumove
+    )
+
+
 #----------------------------------------------------------------------
 #                        Application main routine
 #----------------------------------------------------------------------
 
+
 def main():
     
     #---- Prepare
-    
-    # Game field size
-    SCREEN_W, SCREEN_H = (640, 420)
     
     # Shape drag machine states
     (ST_MOVE, ST_ROTATE, ST_NONE) = range(3)
@@ -147,7 +201,7 @@ def main():
     
     # Setup game window
     display.set_caption(TITLE)
-    display.set_icon(image.load('pytang.bmp'))
+    display.set_icon(image.load(ICON_FILE_NAME))
     
     # Create and setup game field
     screen = display.set_mode((SCREEN_W, SCREEN_H))
@@ -172,9 +226,9 @@ def main():
     # the appropriate value is it's bounding rectangle
     frames = {}
     
-    # Each shape is located in a separate cell of the game field
+    # Each shape is located in a separate "cell" of the game field
     # at first time. The game field is divided by 3 rows and
-    # 3 columns, ergo, 3 x 3 = 9 cells.
+    # 3 columns, ergo, we have 3 x 3 = 9 cells.
     
     # One cell size
     CELL_SIZE = (SCREEN_W / 3, SCREEN_H / 3)
@@ -186,12 +240,15 @@ def main():
         (2, 0)
     )
     
+    # Drawing routine used depends on drawing mode
     if DRAFT_MODE:
         draw_shape = _draw_shape_draft
     else:
         draw_shape = _draw_shape_filled
     
-    # Move shapes to the initial locations
+    # Move shapes to the initial locations,
+    # and store shapes bounding rectangles to
+    # frames dictionary
     for i in range(len(shapes)):
         shapes[i].move_to(
             [
@@ -217,12 +274,12 @@ def main():
         
         for ev in event.get():
             
-            # Game is over - user close main window
+            # Game is over - user closes main window
             if ev.type == QUIT :
                 do_exit = True
                 break
             
-            # Mouse button is push down:
+            # Mouse button is pushed down:
             # user wants to move or rotate one of the shapes
             
             elif (ev.type == MOUSEBUTTONDOWN) and (state == ST_NONE):
@@ -251,7 +308,6 @@ def main():
                         else:
                             state = ST_ROTATE
                         
-                        
                         # Take the active shape from the shapes
                         # common list,
                         # draw other shapes on the background surface.
@@ -266,6 +322,8 @@ def main():
             # Mouse button is up: shape moving/rotating is done
             
             elif (ev.type == MOUSEBUTTONUP) and (state != ST_NONE) :
+                clear_frame(screen, background, frames[active_shape])
+                draw_shape(screen, active_shape)
                 shapes.append(active_shape)
                 active_shape = None
                 state = ST_NONE
@@ -276,15 +334,17 @@ def main():
             
             elif (ev.type == MOUSEMOTION) and (state != ST_NONE) :
                 
-                screen.blit(
-                    background,
-                    frames[active_shape].topleft, frames[active_shape]
-                )
-                
+                clear_frame(screen, background, frames[active_shape])
                 curr_pos = mouse.get_pos()
+                docking = None
                 
                 if state == ST_MOVE :
-                    active_shape.move_by(vectorAB(prev_pos, curr_pos))
+                    manumove = vectorAB(prev_pos, curr_pos)
+                    docking = gravity(
+                        shapes, active_shape,
+                        0.0, manumove
+                    )
+                    active_shape.move_by(manumove)
                 else:
                     active_shape.rotate(
                         inclination(
@@ -297,7 +357,7 @@ def main():
                     )
                 
                 prev_pos = curr_pos
-                frames[active_shape] = draw_shape(screen, active_shape)
+                frames[active_shape] = draw_shape(screen, active_shape, docking)
     
     # Game is over, print shapes location if needed
     if PRINT_OUT:

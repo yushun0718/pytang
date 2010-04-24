@@ -17,13 +17,14 @@ can be defined as:
     ,where p is a real number.
 
 
-Run this module standalone to provide self-testing.
+Run this module standalone for self-testing.
 """
 
 
 __all__ = [
-    'vectorAB', 'distance', 'inclination', 'intersection',
-    'point_to_line_distance'
+    'vectorAB', 'vector_abs','distance', 'inclination', 'intersection',
+    'point_to_line_distance',
+    'scalar_product', 'x_product','transposed'
 ]
 
 
@@ -44,13 +45,31 @@ def vectorAB(A, B):
     return tuple([B[coord] - A[coord] for coord in (0, 1)])
 
 
+def vector_abs(A):
+    """Evaluate vector length"""
+    return sqrt(A[0] **2 + A[1] **2)
+    
+    
 def distance(A, B):
     """Evaluate euqlidian distance between two points"""
     result = 0.0
-    AB = vectorAB(A, B)
     for coord in (0, 1):
-        result += AB[coord] ** 2
+        result += (A[coord] - B[coord])** 2
     return sqrt(result)
+
+
+def scalar_product(A, B):
+    """Evaluate two vectors scalar product"""
+    return A[0] * B[0] + A[1] * B[1]
+
+
+def x_product(A, B):
+    """Evaluate two vectors cross-product"""
+    return A[0] * B[1] - B[0] * A[1]
+
+def transposed(A):
+    """Return transposed vector, i.e. rotated PI/2 counterclockwise"""
+    return (-A[1], A[0])
 
 
 def inclination(A, B):
@@ -69,14 +88,11 @@ def intersection(baseA, directionA, baseB, directionB):
         baseA, directionA - 1-st line base vector and direction vector;
         baseB, directionB - 2-nd line base vector and direction vector.
     """
+    directionB_t = transposed(directionB)
     p = (
-            float(
-                (baseB[0] - baseA[0]) * directionB[1]
-                -
-                (baseB[1] - baseA[1]) * directionB[0]
-            )
+            float(scalar_product(directionB_t, vectorAB(baseA, baseB)))
             /
-            (directionA[0] * directionB[1] - directionA[1] * directionB[0])
+            scalar_product(directionB_t, directionA)
     )
     return tuple([baseA[coord] + p * directionA[coord] for coord in (0, 1)])
 
@@ -88,12 +104,22 @@ def point_to_line_distance(A, base, direction):
         A - point;
         base, direction - line base and direction vectors.
     """
-    # Find the intersection point of the given line
-    # and the orthogonal line including the point A.
-    I = intersection(base, direction, A, (-direction[1], direction[0]))
-    # Return the distance between the point A
-    # and the intersection point I.
-    return distance(A, I)
+    #---- Deprecated implementation
+    
+    #~ # Find the intersection point of the given line
+    #~ # and the orthogonal line including the point A.
+    #~ I = intersection(base, direction, A, transposed(direction))
+    #~ # Return the distance between the point A
+    #~ # and the intersection point I.
+    #~ return distance(A, I)
+    
+    #---- New implementation
+    
+    return (
+        abs(x_product(vectorAB(A, base), direction))
+        /
+        vector_abs(direction)
+    )
 
 
 #----------------------------------------------------------------------

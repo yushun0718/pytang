@@ -13,8 +13,12 @@ accessible via appropriate routines:
     inner radius - radius of the inner circle with center in
         reference point;
 
+Shape also supports [] clause to access separate vertices, as
+well as for ... in ... clause to iterate over shape vertices.
+
 Point is defined as in lines.py module, i.e. as (X, Y) tuple.
 
+Run this module standalone for self-testing.
 """
 
 
@@ -90,6 +94,9 @@ class Shape:
         self.__vertices = tuple(vertices)
         self.__ref_point = ref_point
         self.__r_inner = r_inner
+    
+    def __getitem__(self, *args, **kwargs):
+        return self.__vertices.__getitem__(*args, **kwargs)
     
     def get_vertices(self):
         """Shape vertices getter"""
@@ -432,6 +439,23 @@ if __name__ == '__main__':
                 [(1, 2), (1, 5), (3, 2)]
             )
             assert isinstance(s.get_vertices(), tuple)
+        
+        #---- special attributes tests
+        
+        def test__getitem__(self):
+            """Item access method test"""
+            vertices = [(0, 0), (0, 1), (1, 2)]
+            s = Shape(vertices, (0.5, 0.5), 1.0)
+            for i in range(len(vertices)):
+                assert points_eq(s[i], vertices[i])
+        
+        def test__iter__(self):
+            """Iterations over shape test"""
+            vertices = [(0, 0), (0, 1), (1, 2)]
+            s = Shape(vertices, (0.1, 0.1), 2.5)
+            vertices2 = [v for v in s]
+            assert vertices2 is not vertices
+            assert shapes_eq(vertices, vertices2)
     
     
     class TestTriangle(TestCase):
