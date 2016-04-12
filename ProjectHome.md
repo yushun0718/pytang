@@ -1,0 +1,1 @@
+Tangram puzzle game was invented in the ancient China. Game task is to dock together polygonal shapes to form some funny picture (a tree, a fox, a dog etc.). The game contains 3 simple modules only and have no dependencies except pygame =)
